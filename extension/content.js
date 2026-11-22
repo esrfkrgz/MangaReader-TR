@@ -362,24 +362,31 @@ async function translatePage(force = false, silent = false) {
     imgs = fetched.indices.map(i => imgs[i]);
     const sources = fetched.images;
 
-    if (!silent) progress('Backend’e gönderildi. BallonsTranslator çeviriyor...');
-    const res = await fetch(BACKEND + '/translate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ images: sources, source_lang: sourceLang })
-    });
-    const data = await res.json();
-    if (!data.images || data.images.length !== imgs.length) {
-      return { status: 'Çeviri hatası: ' + (data.error || 'beklenmeyen sonuç') };
+    const chunkSize = 2;
+    let done = 0;
+    for (let start = 0; start < sources.length; start += chunkSize) {
+      const chunkSources = sources.slice(start, start + chunkSize);
+      const chunkImgs = imgs.slice(start, start + chunkSize);
+      const chunkUrls = urls.slice(start, start + chunkSize);
+      if (!silent) progress(`Çevriliyor: ${done + 1}-${done + chunkImgs.length}/${sources.length}`);
+      const res = await fetch(BACKEND + '/translate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ images: chunkSources, source_lang: sourceLang })
+      });
+      const data = await res.json();
+      if (!data.images || data.images.length !== chunkImgs.length) {
+        return { status: 'Çeviri hatası: ' + (data.error || 'beklenmeyen sonuç') };
+      }
+      // Sonuç gelir gelmez bu grubu hemen göster; kalanları arkada çevir.
+      showOverlays(chunkImgs, data.images);
+      await idbSet(batchCacheKey(chunkUrls), data.images);
+      done += chunkImgs.length;
     }
-
-    if (!silent) progress('Çeviriler sayfaya yerleştiriliyor...');
-    showOverlays(imgs, data.images);
-    await new Promise(r => setTimeout(r, 800));
+    await new Promise(r => setTimeout(r, 300));
     overlayPairs.forEach(positionOverlay);
     const ok = overlayPairs.filter(p => p.overlay.complete && p.overlay.naturalWidth > 0).length;
     console.log('[MangaReaderTR] overlay kontrolü:', ok + '/' + overlayPairs.length);
-    await idbSet(key, data.images);
     badge('OK');
     setTimeout(() => badge(''), 5000);
     prefetchNextPages();
