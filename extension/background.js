@@ -7,8 +7,9 @@ function bytesToBase64(bytes) {
   return btoa(binary);
 }
 
-async function fetchAsDataUrl(url) {
-  const res = await fetch(url);
+async function fetchAsDataUrl(url, referer) {
+  const headers = referer ? { 'Referer': referer } : {};
+  const res = await fetch(url, { headers });
   if (!res.ok) throw new Error('HTTP ' + res.status);
   const type = res.headers.get('content-type') || 'image/jpeg';
   const buf = await res.arrayBuffer();
@@ -24,11 +25,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg && msg.action === 'fetch_images') {
     (async () => {
       const results = [];
+      const referer = sender.tab && sender.tab.url;
       for (const url of msg.urls || []) {
         try {
-          results.push(await fetchAsDataUrl(url));
+          results.push(await fetchAsDataUrl(url, referer));
         } catch (e) {
-          results.push(url); // hata olursa orijinal URL'i geri gönder
+          results.push('__FETCH_ERROR__' + e.message);
         }
       }
       sendResponse({ images: results });

@@ -122,11 +122,16 @@ function toDataUrl(blob) {
   });
 }
 
+let lastFetchError = '';
+
 function fetchImagesViaBackground(urls) {
   return new Promise((resolve) => {
     chrome.runtime.sendMessage({ action: 'fetch_images', urls }, (response) => {
-      if (response && response.images) resolve(response.images);
-      else resolve(urls);
+      if (!response || !response.images) { resolve(null); return; }
+      const err = response.images.find(x => typeof x === 'string' && x.startsWith('__FETCH_ERROR__'));
+      if (err) { lastFetchError = err.replace('__FETCH_ERROR__', ''); resolve(null); return; }
+      lastFetchError = '';
+      resolve(response.images);
     });
   });
 }
@@ -216,6 +221,7 @@ async function translatePage(force = false, silent = false) {
     if (!silent) progress('Görseller toplanıyor: ' + imgs.length + ' sayfa...');
     const urls = imgs.map(img => imgSource(img));
     const sources = await fetchImagesViaBackground(urls);
+    if (!sources) return { status: 'Görsel indirilemedi: ' + lastFetchError };
 
     if (!silent) progress('Backend’e gönderildi. BallonsTranslator çeviriyor...');
     const res = await fetch(BACKEND + '/translate', {
@@ -263,6 +269,7 @@ async function translateUrlsInDoc(doc) {
   const imgs = mangaImagesIn(doc);
   if (!imgs.length) return null;
   const sources = await fetchImagesViaBackground(imgs.map(img => imgSource(img)));
+  if (!sources) return null;
   const res = await fetch(BACKEND + '/translate', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
