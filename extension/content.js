@@ -168,24 +168,47 @@ function toDataUrl(blob) {
 
 let lastFetchError = '';
 
-function fetchImagesViaBackground(urls, referer) {
-  const items = urls.map(url => ({ url, referer: referer || location.href }));
+async function fetchImageDirect(url) {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    return await toDataUrl(blob);
+  } catch (e) {
+    return null;
+  }
+}
+
+function fetchImageViaBackground(url, referer) {
   return new Promise((resolve) => {
-    safeSend({ action: 'fetch_images', items }, (response) => {
-      if (!response || !response.images) { resolve(null); return; }
-      const images = [];
-      const indices = [];
-      response.images.forEach((v, i) => {
-        if (typeof v === 'string' && v.startsWith('__FETCH_ERROR__')) {
-          lastFetchError = v.replace('__FETCH_ERROR__', '');
-        } else {
-          images.push(v);
-          indices.push(i);
-        }
-      });
-      resolve({ images, indices });
+    safeSend({ action: 'fetch_images', items: [{ url, referer: referer || location.href }] }, (response) => {
+      const v = response && response.images && response.images[0];
+      if (!v || (typeof v === 'string' && v.startsWith('__FETCH_ERROR__'))) {
+        if (v) lastFetchError = v.replace('__FETCH_ERROR__', '');
+        resolve(null);
+      } else {
+        resolve(v);
+      }
     });
   });
+}
+
+async function fetchImagesViaBackground(urls, referer) {
+  // Eski davranış: önce sayfa içinden doğrudan indir (Hitomi burada çalışıyordu).
+  // CORS engelirse background'a düş (Webtoon için gerekli).
+  const images = [];
+  const indices = [];
+  for (let i = 0; i < urls.length; i++) {
+    let data = await fetchImageDirect(urls[i]);
+    if (!data) data = await fetchImageViaBackground(urls[i], referer);
+    if (data) {
+      images.push(data);
+      indices.push(i);
+    } else {
+      lastFetchError = lastFetchError || 'görsel indirilemedi';
+    }
+  }
+  return { images, indices };
 }
 
 // --- Overlay katmanı: görselin src'sini değiştirmek yerine üstüne çeviri koyar ---
