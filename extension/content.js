@@ -231,6 +231,16 @@ function positionOverlay(pair) {
 }
 
 function showOverlays(imgs, urls) {
+  // Webtoon: görselin kendisini değiştir; sayfa kaydırmada overlay takılmasın.
+  if (/webtoons\.com/.test(location.host)) {
+    imgs.forEach((img, i) => {
+      if (!urls[i]) return;
+      img.src = urls[i];
+      img.dataset.mrTranslated = '1';
+    });
+    return;
+  }
+
   imgs.forEach((img, i) => {
     if (!urls[i]) return;
     let pair = overlayPairs.find(p => p.orig === img);
