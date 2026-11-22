@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8" />
+<style>
+  body { width: 220px; font-family: sans-serif; padding: 10px; }
+  button { width: 100%; padding: 10px; font-size: 14px; cursor: pointer; }
+  #status { margin-top: 8px; font-size: 11px; color: #444; min-height: 16px; white-space: pre-wrap; word-break: break-all; }
+</style>
+</head>
+<body>
+  <button id="go">Bu sayfayı Türkçe çevir</button>
+  <button id="clear" style="margin-top:6px;">Önbelleği temizle</button>
+  <button id="diag" style="margin-top:6px;">Tanılama (log)</button>
+  <label style="display:block;margin-top:8px;font-size:12px;">
+    <input type="checkbox" id="auto" /> Sonraki sayfaları otomatik çevir
+  </label>
+  <div id="status">Hazır.</div>
+  <script src="popup.js"></script>
+</body>
+</html>
