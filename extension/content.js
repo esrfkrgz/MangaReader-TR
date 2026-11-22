@@ -124,9 +124,10 @@ function toDataUrl(blob) {
 
 let lastFetchError = '';
 
-function fetchImagesViaBackground(urls) {
+function fetchImagesViaBackground(urls, referer) {
+  const items = urls.map(url => ({ url, referer: referer || location.href }));
   return new Promise((resolve) => {
-    chrome.runtime.sendMessage({ action: 'fetch_images', urls }, (response) => {
+    chrome.runtime.sendMessage({ action: 'fetch_images', items }, (response) => {
       if (!response || !response.images) { resolve(null); return; }
       const err = response.images.find(x => typeof x === 'string' && x.startsWith('__FETCH_ERROR__'));
       if (err) { lastFetchError = err.replace('__FETCH_ERROR__', ''); resolve(null); return; }
@@ -268,7 +269,7 @@ async function waitForFrameImages(iframe, timeoutMs = 15000) {
 async function translateUrlsInDoc(doc) {
   const imgs = mangaImagesIn(doc);
   if (!imgs.length) return null;
-  const sources = await fetchImagesViaBackground(imgs.map(img => imgSource(img)));
+  const sources = await fetchImagesViaBackground(imgs.map(img => imgSource(img)), doc.location.href);
   if (!sources) return null;
   const res = await fetch(BACKEND + '/translate', {
     method: 'POST',

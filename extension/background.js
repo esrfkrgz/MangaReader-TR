@@ -7,13 +7,32 @@ function bytesToBase64(bytes) {
   return btoa(binary);
 }
 
-async function fetchAsDataUrl(url, referer) {
-  const headers = referer ? { 'Referer': referer } : {};
+async function fetchOnce(url, referer) {
+  const headers = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36',
+    'Accept': 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8'
+  };
+  if (referer) headers['Referer'] = referer;
   const res = await fetch(url, { headers });
   if (!res.ok) throw new Error('HTTP ' + res.status);
   const type = res.headers.get('content-type') || 'image/jpeg';
   const buf = await res.arrayBuffer();
   return 'data:' + type + ';base64,' + bytesToBase64(new Uint8Array(buf));
+}
+
+async function fetchAsDataUrl(url, referer) {
+  try {
+    return await fetchOnce(url, referer);
+  } catch (e) {
+    // Hitomi a1/a2 CDN sunucularından biri 404 dönerse diğerini dene.
+    if (String(e.message).includes('404')) {
+      const alt = url.replace('a1.', 'a2.').replace('a2.', 'a1.');
+      if (alt !== url) {
+        try { return await fetchOnce(alt, referer); } catch (e2) {}
+      }
+    }
+    throw e;
+  }
 }
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
@@ -25,10 +44,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg && msg.action === 'fetch_images') {
     (async () => {
       const results = [];
-      const referer = sender.tab && sender.tab.url;
-      for (const url of msg.urls || []) {
+      const tabReferer = sender.tab && sender.tab.url;
+      const items = msg.items || (msg.urls || []).map(u => ({ url: u, referer: tabReferer }));
+      for (const item of items) {
         try {
-          results.push(await fetchAsDataUrl(url, referer));
+          results.push(await fetchAsDataUrl(item.url, item.referer || tabReferer));
         } catch (e) {
           results.push('__FETCH_ERROR__' + e.message);
         }
