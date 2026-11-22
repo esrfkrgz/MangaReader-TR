@@ -9,18 +9,31 @@ const BACKEND = 'http://127.0.0.1:8000';
 const AUTO_TIMEOUT_MS = 60000; // 1 dakika yeni görsel bulunamazsa otomatik modu kapat.
 let lastFoundTime = Date.now();
 
+let contextInvalid = false;
+
+function safeSend(msg, callback) {
+  if (contextInvalid) return;
+  try {
+    chrome.runtime.sendMessage(msg, (response) => {
+      const err = chrome.runtime && chrome.runtime.lastError;
+      if (err && /invalidated|Receiving end does not exist/i.test(err.message || '')) {
+        contextInvalid = true;
+      }
+      if (callback) callback(response);
+    });
+  } catch (e) {
+    if (/invalidated/i.test(String(e && e.message))) contextInvalid = true;
+    if (callback) callback(null);
+  }
+}
+
 function badge(text) {
-  // chrome.action yalnızca background/popup içinde kullanılabilir.
-  chrome.runtime.sendMessage({ type: 'mr_badge', text: text || '' }, () => {
-    if (chrome.runtime.lastError) { /* popup kapalı olabilir */ }
-  });
+  safeSend({ type: 'mr_badge', text: text || '' });
 }
 
 function progress(text) {
   badge(text.length > 8 ? '...' : text);
-  chrome.runtime.sendMessage({ type: 'mr_progress', text }, () => {
-    if (chrome.runtime.lastError) { /* popup kapalı olabilir */ }
-  });
+  safeSend({ type: 'mr_progress', text });
 }
 
 const DB_NAME = 'mangareader_cache';
@@ -127,7 +140,7 @@ let lastFetchError = '';
 function fetchImagesViaBackground(urls, referer) {
   const items = urls.map(url => ({ url, referer: referer || location.href }));
   return new Promise((resolve) => {
-    chrome.runtime.sendMessage({ action: 'fetch_images', items }, (response) => {
+    safeSend({ action: 'fetch_images', items }, (response) => {
       if (!response || !response.images) { resolve(null); return; }
       const err = response.images.find(x => typeof x === 'string' && x.startsWith('__FETCH_ERROR__'));
       if (err) { lastFetchError = err.replace('__FETCH_ERROR__', ''); resolve(null); return; }
@@ -351,9 +364,7 @@ function maybeAuto() {
     badge('');
     progress('Otomatik mod kapandı');
     console.log('[MangaReaderTR] Otomatik mod kapatıldı: 1 dakika yeni görsel bulunamadı.');
-    chrome.runtime.sendMessage({ type: 'mr_progress', text: 'Otomatik mod kapatıldı (yeni sayfa bulunamadı).' }, () => {
-      if (chrome.runtime.lastError) {}
-    });
+    safeSend({ type: 'mr_progress', text: 'Otomatik mod kapatıldı (yeni sayfa bulunamadı).' });
   }
 }
 
@@ -418,8 +429,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
 } catch (e) {
   console.error('[MangaReaderTR] FATAL:', e);
-  chrome.runtime.sendMessage({ type: 'mr_progress', text: 'FATAL HATA: ' + (e && e.message ? e.message : String(e)) }, () => {
-    if (chrome.runtime.lastError) {}
-  });
+  safeSend({ type: 'mr_progress', text: 'FATAL HATA: ' + (e && e.message ? e.message : String(e)) });
 }
 } // __mrContentLoaded guard
