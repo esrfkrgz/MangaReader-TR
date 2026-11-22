@@ -93,6 +93,12 @@ def main():
             "ocr_llm_sort_reading_order": True,
             "check_need_inpaint": False,
             "empty_runcache": True,
+            "textdetector_params": {
+                "ctd": {"detect_size": {"value": 768}},
+            },
+            "inpainter_params": {
+                "lama_large_512px": {"inpaint_size": {"value": 768}},
+            },
         },
         "global_fontformat": {
             "font_size": 24,

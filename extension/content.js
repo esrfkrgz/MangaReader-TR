@@ -352,7 +352,7 @@ async function translatePage(force = false, silent = false) {
 }
 
 // --- Arka planda sonraki sayfaları çevir (gizli iframe ile) ---
-const PREFETCH_AHEAD = 10;
+const PREFETCH_AHEAD = 4;
 
 async function waitForFrameImages(iframe, timeoutMs = 15000) {
   const start = Date.now();
