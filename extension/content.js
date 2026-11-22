@@ -10,21 +10,52 @@ const AUTO_TIMEOUT_MS = 60000; // 1 dakika yeni görsel bulunamazsa otomatik mod
 let lastFoundTime = Date.now();
 
 let contextInvalid = false;
+let stopped = false;
+
+function stopAll() {
+  if (stopped) return;
+  stopped = true;
+  try { observer.disconnect(); } catch (e) {}
+  try { clearOverlays(); } catch (e) {}
+  console.log('[MangaReaderTR] extension context sona erdi, durduruldu.');
+}
 
 function safeSend(msg, callback) {
-  if (contextInvalid) return;
+  if (contextInvalid || stopped) return;
   try {
     chrome.runtime.sendMessage(msg, (response) => {
       const err = chrome.runtime && chrome.runtime.lastError;
       if (err && /invalidated|Receiving end does not exist/i.test(err.message || '')) {
         contextInvalid = true;
+        stopAll();
       }
       if (callback) callback(response);
     });
   } catch (e) {
-    if (/invalidated/i.test(String(e && e.message))) contextInvalid = true;
+    if (/invalidated/i.test(String(e && e.message))) {
+      contextInvalid = true;
+      stopAll();
+    }
     if (callback) callback(null);
   }
+}
+
+function safeStorageGet(keys, cb) {
+  if (stopped) return;
+  try { chrome.storage.local.get(keys, cb); }
+  catch (e) { if (/invalidated/i.test(String(e && e.message))) stopAll(); }
+}
+
+function safeStorageSet(obj, cb) {
+  if (stopped) return;
+  try { chrome.storage.local.set(obj, cb); }
+  catch (e) { if (/invalidated/i.test(String(e && e.message))) stopAll(); }
+}
+
+function safeStorageClear(cb) {
+  if (stopped) return;
+  try { chrome.storage.local.clear(cb); }
+  catch (e) { if (/invalidated/i.test(String(e && e.message))) stopAll(); }
 }
 
 function badge(text) {
@@ -191,12 +222,13 @@ function showOverlays(imgs, urls) {
   });
 }
 
-window.addEventListener('scroll', () => overlayPairs.forEach(positionOverlay), true);
-window.addEventListener('resize', () => overlayPairs.forEach(positionOverlay));
+window.addEventListener('scroll', () => { if (!stopped) overlayPairs.forEach(positionOverlay); }, true);
+window.addEventListener('resize', () => { if (!stopped) overlayPairs.forEach(positionOverlay); });
 
 let translating = false;
 
 async function translatePage(force = false, silent = false) {
+  if (stopped) return { status: 'Eklenti yenilendi, sayfayı yenileyin.' };
   if (translating) return { status: 'Çeviri zaten sürüyor.' };
   translating = true;
   try {
@@ -294,6 +326,7 @@ async function translateUrlsInDoc(doc) {
 }
 
 async function prefetchPage(pageNum) {
+  if (stopped) return;
   const url = new URL(location.href);
   url.hash = '#' + pageNum;
   const key = keyForUrl(url.href);
@@ -335,7 +368,7 @@ async function prefetchNextPages() {
 
 let autoEnabled = false;
 console.log('[MangaReaderTR] content script yüklendi:', location.href);
-chrome.storage.local.get(['mr_auto'], (r) => { autoEnabled = !!r.mr_auto; });
+safeStorageGet(['mr_auto'], (r) => { autoEnabled = !!r.mr_auto; });
 
 function debugInfo() {
   const imgs = mangaImages();
@@ -351,7 +384,7 @@ function debugInfo() {
 }
 
 function maybeAuto() {
-  if (!autoEnabled || translating) return;
+  if (stopped || !autoEnabled || translating) return;
   const pending = mangaImages().filter(i => !i.dataset.mrTranslated);
   if (pending.length) {
     progress('Otomatik: çeviriliyor');
@@ -360,7 +393,7 @@ function maybeAuto() {
   }
   if (Date.now() - lastFoundTime > AUTO_TIMEOUT_MS) {
     autoEnabled = false;
-    chrome.storage.local.set({ mr_auto: false });
+    safeStorageSet({ mr_auto: false });
     badge('');
     progress('Otomatik mod kapandı');
     console.log('[MangaReaderTR] Otomatik mod kapatıldı: 1 dakika yeni görsel bulunamadı.');
@@ -369,6 +402,7 @@ function maybeAuto() {
 }
 
 async function applyCachedIfAny() {
+  if (stopped) return false;
   const imgs = mangaImages().filter(i => !i.dataset.mrTranslated);
   if (!imgs.length) return false;
   const cached = await idbGet(cacheKey());
@@ -382,6 +416,7 @@ async function applyCachedIfAny() {
 }
 
 function onNavigate() {
+  if (stopped) return;
   clearOverlays();
   setTimeout(async () => {
     if (await applyCachedIfAny()) return;
@@ -412,7 +447,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
   if (msg && msg.action === 'auto') {
     autoEnabled = !!msg.enabled;
-    chrome.storage.local.set({ mr_auto: autoEnabled });
+    safeStorageSet({ mr_auto: autoEnabled });
     sendResponse({ status: autoEnabled ? 'Otomatik mod açık.' : 'Otomatik mod kapalı.' });
     if (autoEnabled) setTimeout(maybeAuto, 500);
     return true;
