@@ -565,14 +565,7 @@ function maybeAuto() {
     translatePage(false, true);
     return;
   }
-  if (Date.now() - lastFoundTime > AUTO_TIMEOUT_MS) {
-    autoEnabled = false;
-    safeStorageSet({ mr_auto: false });
-    badge('');
-    progress('Otomatik mod kapandı');
-    console.log('[MangaReaderTR] Otomatik mod kapatıldı: 1 dakika yeni görsel bulunamadı.');
-    safeSend({ type: 'mr_progress', text: 'Otomatik mod kapatıldı (yeni sayfa bulunamadı).' });
-  }
+  // Otomatik mod kullanıcı kapatana kadar açık kalır (kendiliğinden kapanmaz).
 }
 
 async function applyCachedIfAny() {
