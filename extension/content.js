@@ -74,7 +74,11 @@ function imgSource(img) {
 
 function mangaImagesIn(doc) {
   const all = [...doc.images];
-  let imgs = all.filter(i => i.className && i.className.includes('limit-width'));
+  let imgs = all.filter(i => i.className && (
+    i.className.includes('limit-width') ||
+    i.className.includes('_images')   // Webtoon görselleri
+  ));
+  imgs = imgs.filter(i => !i.className.includes('_thumbnailImages'));
   if (!imgs.length) {
     imgs = all.filter(i => {
       const s = imgSource(i).toLowerCase();
