@@ -263,6 +263,7 @@ const originalSrcMap = new WeakMap();
 function clearOverlays() {
   document.querySelectorAll('.' + OVERLAY_CLASS).forEach(e => e.remove());
   overlayPairs = [];
+  try { clearOcrOverlays(); } catch (e) {}
   document.querySelectorAll('img[data-mr-translated]').forEach(i => delete i.dataset.mrTranslated);
 }
 
@@ -317,8 +318,56 @@ function showOverlays(imgs, urls) {
   });
 }
 
-window.addEventListener('scroll', () => { if (!stopped) overlayPairs.forEach(positionOverlay); }, true);
-window.addEventListener('resize', () => { if (!stopped) overlayPairs.forEach(positionOverlay); });
+// --- Sadece OCR modu: algılanan orijinal metni balon üstüne yaz ---
+const OCR_CLASS = 'mangareader-ocr-overlay';
+let ocrPairs = [];
+
+function clearOcrOverlays() {
+  document.querySelectorAll('.' + OCR_CLASS).forEach(e => e.remove());
+  ocrPairs = [];
+}
+
+function positionOcr(pair) {
+  if (!pair.img.isConnected) return;
+  const r = pair.img.getBoundingClientRect();
+  const sx = r.width / (pair.img.naturalWidth || 1);
+  const sy = r.height / (pair.img.naturalHeight || 1);
+  pair.el.style.left = (r.left + pair.box[0] * sx) + 'px';
+  pair.el.style.top = (r.top + pair.box[1] * sy) + 'px';
+  pair.el.style.width = Math.max(12, (pair.box[2] - pair.box[0]) * sx) + 'px';
+  pair.el.style.height = Math.max(12, (pair.box[3] - pair.box[1]) * sy) + 'px';
+}
+
+function showOcrBlocks(img, blocks) {
+  clearOcrOverlays();
+  if (!img || !blocks || !blocks.length) return;
+  const whiteBg = textBackground === 'white';
+  blocks.forEach(b => {
+    const box = b.box || [0, 0, 0, 0];
+    const el = document.createElement('div');
+    el.className = OCR_CLASS;
+    el.textContent = b.text || '';
+    el.style.cssText = 'position:fixed;z-index:2147483647;pointer-events:none;display:flex;align-items:center;justify-content:center;' +
+      'font:13px sans-serif;font-weight:600;text-align:center;padding:1px;box-sizing:border-box;border-radius:4px;' +
+      (whiteBg
+        ? 'background:rgba(255,255,255,0.75);color:#000;'
+        : 'background:rgba(0,0,0,0.55);color:#fff;text-shadow:0 0 2px #000,0 0 2px #000;');
+    document.body.appendChild(el);
+    ocrPairs.push({ img, box, el });
+    positionOcr(ocrPairs[ocrPairs.length - 1]);
+  });
+}
+
+window.addEventListener('scroll', () => {
+  if (stopped) return;
+  overlayPairs.forEach(positionOverlay);
+  ocrPairs.forEach(positionOcr);
+}, true);
+window.addEventListener('resize', () => {
+  if (stopped) return;
+  overlayPairs.forEach(positionOverlay);
+  ocrPairs.forEach(positionOcr);
+});
 
 let translating = false;
 
@@ -389,8 +438,12 @@ async function translatePage(force = false, silent = false) {
         return { status: 'Çeviri hatası: ' + (data.error || 'beklenmeyen sonuç') };
       }
       // Sonuç gelir gelmez bu grubu hemen göster; kalanları arkada çevir.
-      showOverlays(chunkImgs, data.images);
-      await idbSet(batchCacheKey(chunkUrls), data.images);
+      if (ocrOnly) {
+        showOcrBlocks(chunkImgs[0], data.blocks);
+      } else {
+        showOverlays(chunkImgs, data.images);
+      }
+      await idbSet(batchCacheKey(chunkUrls), ocrOnly ? (data.blocks || []) : data.images);
       done += chunkImgs.length;
     }
     await new Promise(r => setTimeout(r, 300));
@@ -431,7 +484,7 @@ async function translateUrlsInDoc(doc, cacheKeyOverride) {
   const res = await fetch(BACKEND + '/translate', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ images: sources, source_lang: sourceLang, inpaint: inpaintEnabled, background: textBackground })
+    body: JSON.stringify({ images: sources, source_lang: sourceLang, inpaint: inpaintEnabled, background: textBackground, ocr_only: ocrOnly })
   });
   const data = await res.json();
   return data.images && data.images.length === imgs.length ? data.images : null;
@@ -481,12 +534,14 @@ let autoEnabled = false;
 let sourceLang = 'English';
 let inpaintEnabled = true;
 let textBackground = 'auto';
+let ocrOnly = false;
 console.log('[MangaReaderTR] content script yüklendi:', location.href);
-safeStorageGet(['mr_auto', 'mr_source_lang', 'mr_inpaint', 'mr_background'], (r) => {
+safeStorageGet(['mr_auto', 'mr_source_lang', 'mr_inpaint', 'mr_background', 'mr_ocr_only'], (r) => {
   autoEnabled = !!r.mr_auto;
   if (r.mr_source_lang) sourceLang = r.mr_source_lang;
   if (typeof r.mr_inpaint === 'boolean') inpaintEnabled = r.mr_inpaint;
   if (r.mr_background) textBackground = r.mr_background;
+  ocrOnly = !!r.mr_ocr_only;
 });
 
 function debugInfo() {
@@ -526,9 +581,11 @@ async function applyCachedIfAny() {
   if (!imgs.length) return false;
   const cached = await idbGet(batchCacheKey(imgs.map(imgSource)));
   if (!cached) return false;
-  showOverlays(imgs, cached);
+  if (ocrOnly) showOcrBlocks(imgs[0], cached);
+  else showOverlays(imgs, cached);
   await sleep(300);
   overlayPairs.forEach(positionOverlay);
+  ocrPairs.forEach(positionOcr);
   progress('Hazır çeviri');
   console.log('[MangaReaderTR] hazır çeviri uygulandı:', imgs.length);
   return true;
@@ -602,14 +659,15 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
   if (msg && msg.action === 'get_render') {
-    sendResponse({ inpaint: inpaintEnabled, background: textBackground });
+    sendResponse({ inpaint: inpaintEnabled, background: textBackground, ocrOnly });
     return true;
   }
   if (msg && msg.action === 'set_render') {
     inpaintEnabled = msg.inpaint !== false;
     textBackground = msg.background || 'auto';
-    safeStorageSet({ mr_inpaint: inpaintEnabled, mr_background: textBackground });
-    sendResponse({ inpaint: inpaintEnabled, background: textBackground });
+    ocrOnly = !!msg.ocrOnly;
+    safeStorageSet({ mr_inpaint: inpaintEnabled, mr_background: textBackground, mr_ocr_only: ocrOnly });
+    sendResponse({ inpaint: inpaintEnabled, background: textBackground, ocrOnly });
     return true;
   }
   if (msg && msg.action === 'get_source') {

@@ -109,21 +109,24 @@ srcEl.addEventListener('change', async () => {
 });
 
 const noInpaintEl = document.getElementById('noinpaint');
+const ocrOnlyEl = document.getElementById('ocronly');
 const bgEl = document.getElementById('bg');
 (async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!await ensureContent(tab)) return;
   const r = await send(tab, { action: 'get_render' });
   noInpaintEl.checked = !r.response?.inpaint;
+  ocrOnlyEl.checked = !!r.response?.ocrOnly;
   if (r.response?.background) bgEl.value = r.response.background;
 })();
 
 async function pushRender() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!await ensureContent(tab)) return;
-  await send(tab, { action: 'set_render', inpaint: !noInpaintEl.checked, background: bgEl.value });
+  await send(tab, { action: 'set_render', inpaint: !noInpaintEl.checked, ocrOnly: ocrOnlyEl.checked, background: bgEl.value });
 }
 noInpaintEl.addEventListener('change', async () => { await pushRender(); setStatus(noInpaintEl.checked ? 'Üstüne yaz modu açık' : 'Metin siliniyor'); });
+ocrOnlyEl.addEventListener('change', async () => { await pushRender(); setStatus(ocrOnlyEl.checked ? 'Sadece OCR modu açık' : 'Normal çeviri'); });
 bgEl.addEventListener('change', async () => { await pushRender(); setStatus('Zemin: ' + bgEl.value); });
 
 const autoEl = document.getElementById('auto');

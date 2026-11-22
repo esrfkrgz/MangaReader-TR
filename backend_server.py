@@ -48,14 +48,43 @@ def b64_to_bytes(data_url):
         raise ValueError(f"geçersiz base64: {e}")
 
 
-def build_job_config(source_lang, inpaint, background):
+def extract_blocks(job):
+    """Algılanan metin bloklarını okuma sırasıyla döndürür."""
+    for name in os.listdir(job):
+        if not (name.startswith("imgtrans_") and name.endswith(".json")):
+            continue
+        try:
+            with open(os.path.join(job, name), "r", encoding="utf-8") as f:
+                data = json.load(f)
+            blocks = []
+            for page_key in sorted(data.get("pages", {}).keys()):
+                for b in data["pages"][page_key] or []:
+                    text = b.get("text") or []
+                    if isinstance(text, list):
+                        text = " ".join(str(x) for x in text if x)
+                    box = b.get("xyxy") or [0, 0, 0, 0]
+                    blocks.append({
+                        "text": str(text).strip(),
+                        "box": [float(v) for v in box[:4]],
+                    })
+            def key(item):
+                x1, y1, x2, y2 = item["box"]
+                return (int(((y1 + y2) / 2) // 40), -((x1 + x2) / 2))
+            return sorted(blocks, key=key)
+        except Exception:
+            pass
+    return []
+
+
+def build_job_config(source_lang, inpaint, background, ocr_only=False):
     """İstek için özel config üret; genel config dosyasına dokunma."""
     with open(BT_CONFIG, "r", encoding="utf-8") as f:
         cfg = json.load(f)
     module = cfg.setdefault("module", {})
     if source_lang in SOURCE_LANGUAGES:
         module["translate_source"] = source_lang
-    module["enable_inpaint"] = bool(inpaint)
+    module["enable_inpaint"] = bool(inpaint) and not ocr_only
+    module["enable_translate"] = not ocr_only
     fmt = cfg.setdefault("global_fontformat", {})
     if background == "white":
         fmt["frgb"] = [0, 0, 0]
@@ -109,7 +138,7 @@ async def translate(req: Request):
     )
 
     # Her istek kendi config dosyasını kullanır; inpainting kapalıysa hiç çalışmaz.
-    cfg = build_job_config(body.get("source_lang"), body.get("inpaint", True), body.get("background", "auto"))
+    cfg = build_job_config(body.get("source_lang"), body.get("inpaint", True), body.get("background", "auto"), body.get("ocr_only", False))
     config_path = os.path.join(job, "request_config.json")
     with open(config_path, "w", encoding="utf-8") as f:
         json.dump(cfg, f, ensure_ascii=False, indent=2)
@@ -125,7 +154,8 @@ async def translate(req: Request):
             if name.lower().endswith((".png", ".jpg", ".jpeg")):
                 with open(os.path.join(result_dir, name), "rb") as f:
                     out.append("data:image/png;base64," + base64.b64encode(f.read()).decode("ascii"))
-        return {"images": out}
+        blocks = extract_blocks(job)
+        return {"images": out, "blocks": blocks}
     finally:
         # Geçici iş klasörünü her durumda sil; çevirdikçe diskte birikmesin.
         shutil.rmtree(job, ignore_errors=True)
