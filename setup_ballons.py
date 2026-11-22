@@ -43,11 +43,15 @@ def main():
     patch_file(bubble, [
         ("minimum = min(9., maximum)", "minimum = min(READABILITY_FLOOR_PX, maximum)"),
         ("actual < 9 - .1", "actual < READABILITY_FLOOR_PX - .1"),
+        ("READABILITY_FLOOR_PX = 14.0", "READABILITY_FLOOR_PX = 18.0"),
     ])
     patch_file(manager, [
-        ("downscale_constraint = 0.6", "downscale_constraint = 0.8"),
+        ("downscale_constraint = 0.6", "downscale_constraint = 0.9"),
         ("resize_ratio = min(max(resize_ratio, 0.6), 1)",
-         "resize_ratio = min(max(resize_ratio, 0.8), 1)"),
+         "resize_ratio = min(max(resize_ratio, 0.9), 1)"),
+        ("downscale_constraint = 0.8", "downscale_constraint = 0.9"),
+        ("resize_ratio = min(max(resize_ratio, 0.8), 1)",
+         "resize_ratio = min(max(resize_ratio, 0.9), 1)"),
     ])
 
     # READABILITY_FLOOR_PX sabiti yoksa ekle.
@@ -65,21 +69,33 @@ def main():
     cfg_dir = os.path.join(bt, "config")
     os.makedirs(cfg_dir, exist_ok=True)
     cfg_path = os.path.join(cfg_dir, "config.json")
-    cfg = {"module": {
-        "textdetector": "ctd",
-        "ocr": "mit48px",
-        "inpainter": "lama_large_512px",
-        "translator": "google",
-        "enable_detect": True,
-        "enable_ocr": True,
-        "enable_translate": True,
-        "enable_inpaint": True,
-        "translate_source": "日本語",
-        "translate_target": "Türk dili",
-        "ocr_llm_sort_reading_order": True,
-        "check_need_inpaint": False,
-        "empty_runcache": True,
-    }}
+    cfg = {
+        "module": {
+            "textdetector": "ctd",
+            "ocr": "mit48px",
+            "inpainter": "lama_large_512px",
+            "translator": "google",
+            "enable_detect": True,
+            "enable_ocr": True,
+            "enable_translate": True,
+            "enable_inpaint": True,
+            "translate_source": "日本語",
+            "translate_target": "Türk dili",
+            "ocr_llm_sort_reading_order": True,
+            "check_need_inpaint": False,
+            "empty_runcache": True,
+        },
+        "global_fontformat": {
+            "font_size": 24,
+            "letter_spacing": 1.0,
+            "line_spacing": 1.1,
+            "frgb": [255, 255, 255],
+            "srgb": [0, 0, 0],
+            "stroke_width": 1.5,
+        },
+        "let_fntsize_flag": 0,
+        "let_autolayout_flag": True,
+    }
     with open(cfg_path, "w", encoding="utf-8") as f:
         json.dump(cfg, f, ensure_ascii=False, indent=2)
     print("CONFIG YAZILDI:", cfg_path)
