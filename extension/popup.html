@@ -29,6 +29,17 @@
   <button id="clear" style="margin-top:6px;">Önbelleği temizle</button>
   <button id="diag" style="margin-top:6px;">Tanılama (log)</button>
   <label style="display:block;margin-top:8px;font-size:12px;">
+    <input type="checkbox" id="noinpaint" /> Orijinal metni silme (üstüne yaz)
+  </label>
+  <label style="display:block;font-size:12px;margin-top:4px;">
+    Yazı zemini:
+    <select id="bg" style="width:100%;margin-top:3px;">
+      <option value="auto">Otomatik (beyaz yazı, siyah kontur)</option>
+      <option value="white">Beyaz zemin (siyah yazı)</option>
+      <option value="black">Siyah zemin (beyaz yazı)</option>
+    </select>
+  </label>
+  <label style="display:block;margin-top:8px;font-size:12px;">
     <input type="checkbox" id="auto" /> Sonraki sayfaları otomatik çevir
   </label>
   <div id="status">Hazır.</div>

@@ -108,6 +108,24 @@ srcEl.addEventListener('change', async () => {
   setStatus(r.ok ? ('Kaynak dil: ' + srcEl.value) : ('Hata: ' + r.error));
 });
 
+const noInpaintEl = document.getElementById('noinpaint');
+const bgEl = document.getElementById('bg');
+(async () => {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!await ensureContent(tab)) return;
+  const r = await send(tab, { action: 'get_render' });
+  noInpaintEl.checked = !r.response?.inpaint;
+  if (r.response?.background) bgEl.value = r.response.background;
+})();
+
+async function pushRender() {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!await ensureContent(tab)) return;
+  await send(tab, { action: 'set_render', inpaint: !noInpaintEl.checked, background: bgEl.value });
+}
+noInpaintEl.addEventListener('change', async () => { await pushRender(); setStatus(noInpaintEl.checked ? 'Üstüne yaz modu açık' : 'Metin siliniyor'); });
+bgEl.addEventListener('change', async () => { await pushRender(); setStatus('Zemin: ' + bgEl.value); });
+
 const autoEl = document.getElementById('auto');
 (async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });

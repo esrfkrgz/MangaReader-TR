@@ -48,6 +48,31 @@ def b64_to_bytes(data_url):
         raise ValueError(f"geçersiz base64: {e}")
 
 
+def set_render_mode(inpaint, background):
+    """Orijinal metni silme ve yazı rengi/zemin ayarlarını uygula."""
+    try:
+        with open(BT_CONFIG, "r", encoding="utf-8") as f:
+            cfg = json.load(f)
+        cfg.setdefault("module", {})["enable_inpaint"] = bool(inpaint)
+        fmt = cfg.setdefault("global_fontformat", {})
+        if background == "white":
+            fmt["frgb"] = [0, 0, 0]
+            fmt["srgb"] = [255, 255, 255]
+            fmt["stroke_width"] = 1.5
+        elif background == "black":
+            fmt["frgb"] = [255, 255, 255]
+            fmt["srgb"] = [0, 0, 0]
+            fmt["stroke_width"] = 1.5
+        else:
+            fmt["frgb"] = [255, 255, 255]
+            fmt["srgb"] = [0, 0, 0]
+            fmt["stroke_width"] = 1.5
+        with open(BT_CONFIG, "w", encoding="utf-8") as f:
+            json.dump(cfg, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+
 def set_source_language(lang):
     """BallonsTranslator config'inde kaynak dil'i geçici olarak ayarla."""
     if not lang or lang not in SOURCE_LANGUAGES:
@@ -106,6 +131,7 @@ async def translate(req: Request):
     # Aynı anda birden fazla istek config dosyasını bozmasın.
     async with job_lock:
         set_source_language(body.get("source_lang"))
+        set_render_mode(body.get("inpaint", True), body.get("background", "auto"))
         proc = await asyncio.to_thread(run_ballons, job, env)
 
     result_dir = os.path.join(job, "result")

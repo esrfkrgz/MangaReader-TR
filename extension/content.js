@@ -431,7 +431,7 @@ async function translateUrlsInDoc(doc, cacheKeyOverride) {
   const res = await fetch(BACKEND + '/translate', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ images: sources, source_lang: sourceLang })
+    body: JSON.stringify({ images: sources, source_lang: sourceLang, inpaint: inpaintEnabled, background: textBackground })
   });
   const data = await res.json();
   return data.images && data.images.length === imgs.length ? data.images : null;
@@ -479,10 +479,14 @@ async function prefetchNextPages() {
 
 let autoEnabled = false;
 let sourceLang = 'English';
+let inpaintEnabled = true;
+let textBackground = 'auto';
 console.log('[MangaReaderTR] content script yüklendi:', location.href);
-safeStorageGet(['mr_auto', 'mr_source_lang'], (r) => {
+safeStorageGet(['mr_auto', 'mr_source_lang', 'mr_inpaint', 'mr_background'], (r) => {
   autoEnabled = !!r.mr_auto;
   if (r.mr_source_lang) sourceLang = r.mr_source_lang;
+  if (typeof r.mr_inpaint === 'boolean') inpaintEnabled = r.mr_inpaint;
+  if (r.mr_background) textBackground = r.mr_background;
 });
 
 function debugInfo() {
@@ -595,6 +599,17 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
   if (msg && msg.action === 'get_auto') {
     sendResponse({ enabled: autoEnabled });
+    return true;
+  }
+  if (msg && msg.action === 'get_render') {
+    sendResponse({ inpaint: inpaintEnabled, background: textBackground });
+    return true;
+  }
+  if (msg && msg.action === 'set_render') {
+    inpaintEnabled = msg.inpaint !== false;
+    textBackground = msg.background || 'auto';
+    safeStorageSet({ mr_inpaint: inpaintEnabled, mr_background: textBackground });
+    sendResponse({ inpaint: inpaintEnabled, background: textBackground });
     return true;
   }
   if (msg && msg.action === 'get_source') {
