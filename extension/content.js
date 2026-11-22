@@ -173,10 +173,17 @@ function fetchImagesViaBackground(urls, referer) {
   return new Promise((resolve) => {
     safeSend({ action: 'fetch_images', items }, (response) => {
       if (!response || !response.images) { resolve(null); return; }
-      const err = response.images.find(x => typeof x === 'string' && x.startsWith('__FETCH_ERROR__'));
-      if (err) { lastFetchError = err.replace('__FETCH_ERROR__', ''); resolve(null); return; }
-      lastFetchError = '';
-      resolve(response.images);
+      const images = [];
+      const indices = [];
+      response.images.forEach((v, i) => {
+        if (typeof v === 'string' && v.startsWith('__FETCH_ERROR__')) {
+          lastFetchError = v.replace('__FETCH_ERROR__', '');
+        } else {
+          images.push(v);
+          indices.push(i);
+        }
+      });
+      resolve({ images, indices });
     });
   });
 }
@@ -266,13 +273,12 @@ async function translatePage(force = false, silent = false) {
 
     if (!silent) progress('Görseller toplanıyor: ' + imgs.length + ' sayfa...');
     const urls = imgs.map(img => imgSource(img));
-    const sources = await fetchImagesViaBackground(urls);
-    if (!sources) {
-      const hint = /404/.test(lastFetchError)
-        ? ' (Hitomi görsel URL’si süresi dolmuş olabilir; Ctrl+F5 ile sayfayı yenileyin)'
-        : '';
-      return { status: 'Görsel indirilemedi: ' + lastFetchError + hint };
+    const fetched = await fetchImagesViaBackground(urls);
+    if (!fetched || !fetched.images.length) {
+      return { status: 'Hiçbir görsel indirilemedi: ' + lastFetchError };
     }
+    imgs = fetched.indices.map(i => imgs[i]);
+    const sources = fetched.images;
 
     if (!silent) progress('Backend’e gönderildi. BallonsTranslator çeviriyor...');
     const res = await fetch(BACKEND + '/translate', {
@@ -317,10 +323,12 @@ async function waitForFrameImages(iframe, timeoutMs = 15000) {
 }
 
 async function translateUrlsInDoc(doc) {
-  const imgs = mangaImagesIn(doc);
+  let imgs = mangaImagesIn(doc);
   if (!imgs.length) return null;
-  const sources = await fetchImagesViaBackground(imgs.map(img => imgSource(img)), doc.location.href);
-  if (!sources) return null;
+  const fetched = await fetchImagesViaBackground(imgs.map(img => imgSource(img)), doc.location.href);
+  if (!fetched || !fetched.images.length) return null;
+  imgs = fetched.indices.map(i => imgs[i]);
+  const sources = fetched.images;
   const res = await fetch(BACKEND + '/translate', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

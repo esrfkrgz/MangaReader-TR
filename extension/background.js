@@ -20,8 +20,6 @@ async function fetchOnce(url, referer) {
   return 'data:' + type + ';base64,' + bytesToBase64(new Uint8Array(buf));
 }
 
-const TRANSPARENT_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
-
 async function fetchAsDataUrl(url, referer) {
   try {
     return await fetchOnce(url, referer);
@@ -33,8 +31,7 @@ async function fetchAsDataUrl(url, referer) {
         try { return await fetchOnce(alt, referer); } catch (e2) {}
       }
     }
-    // Tek bir görsel 403/404 dönerse tüm çeviriyi bozma; boş görsel kullan.
-    return TRANSPARENT_PNG;
+    throw e;
   }
 }
 
