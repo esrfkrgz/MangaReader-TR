@@ -177,6 +177,12 @@ function cacheKey() {
   return location.host + location.pathname + location.hash + location.search;
 }
 
+function pageLabel(img, index) {
+  const src = imgSource(img);
+  const m = src.match(/_(\d+)\.(?:jpg|jpeg|png|webp)/i) || src.match(/(\d+)\.(?:jpg|jpeg|png|webp)/i);
+  return m ? String(parseInt(m[1], 10)) : String(index + 1);
+}
+
 function hashStr(s) {
   let h = 0;
   for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0;
@@ -368,7 +374,11 @@ async function translatePage(force = false, silent = false) {
       const chunkSources = sources.slice(start, start + chunkSize);
       const chunkImgs = imgs.slice(start, start + chunkSize);
       const chunkUrls = urls.slice(start, start + chunkSize);
-      if (!silent) progress(`Çevriliyor: ${done + 1}-${done + chunkImgs.length}/${sources.length}`);
+      const pageNo = pageLabel(chunkImgs[0], start);
+      if (!silent) {
+        progress(`Sayfa ${pageNo} çevriliyor (${done + 1}/${sources.length})`);
+        badge(pageNo.length > 4 ? '...' : pageNo);
+      }
       const res = await fetch(BACKEND + '/translate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
