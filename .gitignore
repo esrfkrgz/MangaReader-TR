@@ -5,3 +5,4 @@ outputs/
 err.log
 out.log
 .env
+debug_*.py
