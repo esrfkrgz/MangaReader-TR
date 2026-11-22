@@ -267,7 +267,12 @@ async function translatePage(force = false, silent = false) {
     if (!silent) progress('Görseller toplanıyor: ' + imgs.length + ' sayfa...');
     const urls = imgs.map(img => imgSource(img));
     const sources = await fetchImagesViaBackground(urls);
-    if (!sources) return { status: 'Görsel indirilemedi: ' + lastFetchError };
+    if (!sources) {
+      const hint = /404/.test(lastFetchError)
+        ? ' (Hitomi görsel URL’si süresi dolmuş olabilir; Ctrl+F5 ile sayfayı yenileyin)'
+        : '';
+      return { status: 'Görsel indirilemedi: ' + lastFetchError + hint };
+    }
 
     if (!silent) progress('Backend’e gönderildi. BallonsTranslator çeviriyor...');
     const res = await fetch(BACKEND + '/translate', {
