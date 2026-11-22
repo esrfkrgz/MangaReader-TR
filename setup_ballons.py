@@ -56,6 +56,11 @@ def main():
          "from ..bubble_layout import fit_text_in_shape\n\nMIN_FONT_PT = 18.0"),
         ("new_font_size = blk_font.pointSizeF() * resize_ratio",
          "new_font_size = max(blk_font.pointSizeF() * resize_ratio, MIN_FONT_PT)"),
+        ("new_font_size = blkitem.font().pointSizeF() * resize_ratio",
+         "new_font_size = max(blkitem.font().pointSizeF() * resize_ratio, MIN_FONT_PT)"),
+        ("max_enlarge_ratio = 2.5", "max_enlarge_ratio = 4.0"),
+        ("max_enlarge_ratio = 3\n", "max_enlarge_ratio = 5.0\n"),
+        (") * 1.5, max_enlarge_ratio)", ") * 2.0, max_enlarge_ratio)"),
     ])
 
     # READABILITY_FLOOR_PX sabiti yoksa ekle.
