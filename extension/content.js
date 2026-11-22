@@ -235,7 +235,7 @@ async function translatePage(force = false, silent = false) {
     if (!silent) progress('Sayfa taranıyor...');
     const all = mangaImages();
     console.log('[MangaReaderTR] aday görsel:', all.length);
-    let imgs = all.filter(i => force || !i.dataset.mrTranslated);
+    let imgs = all.filter(i => force || !i.dataset.mrTranslated).slice(0, 10);
     if (!imgs.length) {
       const msg = all.length ? 'Yeni sayfa yok (' + all.length + ' görsel çevrilmiş).' :
         'Sayfada manga görseli bulunamadı. Toplam img: ' + document.images.length;
