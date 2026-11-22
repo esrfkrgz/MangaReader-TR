@@ -362,7 +362,7 @@ async function translatePage(force = false, silent = false) {
     imgs = fetched.indices.map(i => imgs[i]);
     const sources = fetched.images;
 
-    const chunkSize = 2;
+    const chunkSize = 1;
     let done = 0;
     for (let start = 0; start < sources.length; start += chunkSize) {
       const chunkSources = sources.slice(start, start + chunkSize);
