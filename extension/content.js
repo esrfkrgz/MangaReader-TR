@@ -92,7 +92,35 @@ async function idbGet(key) {
   });
 }
 
+async function idbKeys() {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('pages', 'readonly');
+    const req = tx.objectStore('pages').getAllKeys();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function idbDelete(key) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('pages', 'readwrite');
+    tx.objectStore('pages').delete(key);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
 async function idbSet(key, value) {
+  try {
+    const keys = await idbKeys();
+    const maxEntries = 24;
+    if (keys.length >= maxEntries) {
+      const old = keys.filter(k => typeof k === 'string' && !k.startsWith('blocks_')).slice(0, keys.length - maxEntries + 1);
+      for (const k of old) await idbDelete(k);
+    }
+  } catch (e) {}
   const db = await openDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction('pages', 'readwrite');
@@ -147,6 +175,16 @@ function mangaImages() {
 
 function cacheKey() {
   return location.host + location.pathname + location.hash + location.search;
+}
+
+function hashStr(s) {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(36);
+}
+
+function batchCacheKey(urls) {
+  return cacheKey() + '_' + hashStr(urls.join('|'));
 }
 
 function keyForUrl(u) {
@@ -302,8 +340,9 @@ async function translatePage(force = false, silent = false) {
       delete img.dataset.mrTranslated;
     });
 
-    const key = cacheKey();
-    if (!force) {
+    const urls = imgs.map(img => imgSource(img));
+    const key = batchCacheKey(urls);
+    if (!force && !silent) {
       const cached = await idbGet(key);
       if (cached) {
         if (!silent) progress('Önbellekten yükleniyor...');
@@ -316,7 +355,6 @@ async function translatePage(force = false, silent = false) {
     }
 
     if (!silent) progress('Görseller toplanıyor: ' + imgs.length + ' sayfa...');
-    const urls = imgs.map(img => imgSource(img));
     const fetched = await fetchImagesViaBackground(urls);
     if (!fetched || !fetched.images.length) {
       return { status: 'Hiçbir görsel indirilemedi: ' + lastFetchError };
@@ -366,7 +404,7 @@ async function waitForFrameImages(iframe, timeoutMs = 15000) {
   return [];
 }
 
-async function translateUrlsInDoc(doc) {
+async function translateUrlsInDoc(doc, cacheKeyOverride) {
   let imgs = mangaImagesIn(doc);
   if (!imgs.length) return null;
   const fetched = await fetchImagesViaBackground(imgs.map(img => imgSource(img)), doc.location.href);
@@ -376,7 +414,7 @@ async function translateUrlsInDoc(doc) {
   const res = await fetch(BACKEND + '/translate', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ images: sources })
+    body: JSON.stringify({ images: sources, source_lang: sourceLang })
   });
   const data = await res.json();
   return data.images && data.images.length === imgs.length ? data.images : null;
@@ -386,9 +424,6 @@ async function prefetchPage(pageNum) {
   if (stopped) return;
   const url = new URL(location.href);
   url.hash = '#' + pageNum;
-  const key = keyForUrl(url.href);
-  if (await idbGet(key)) return; // zaten çevrilmiş
-
   const iframe = document.createElement('iframe');
   iframe.style.cssText = 'position:fixed;left:-9999px;top:0;width:900px;height:1400px;opacity:0;border:0;pointer-events:none;';
   iframe.src = url.href;
@@ -403,7 +438,9 @@ async function prefetchPage(pageNum) {
       console.log('[MangaReaderTR] prefetch: sayfa', pageNum, 'görsel bulunamadı');
       return;
     }
-    const translated = await translateUrlsInDoc(iframe.contentDocument);
+    const key = batchCacheKey(imgs.map(img => imgSource(img)));
+    if (await idbGet(key)) return; // zaten çevrilmiş
+    const translated = await translateUrlsInDoc(iframe.contentDocument, key);
     if (translated) {
       await idbSet(key, translated);
       console.log('[MangaReaderTR] prefetch: sayfa', pageNum, 'hazır');
@@ -466,7 +503,7 @@ async function applyCachedIfAny() {
   if (stopped) return false;
   const imgs = mangaImages().filter(i => !i.dataset.mrTranslated);
   if (!imgs.length) return false;
-  const cached = await idbGet(cacheKey());
+  const cached = await idbGet(batchCacheKey(imgs.map(imgSource)));
   if (!cached) return false;
   showOverlays(imgs, cached);
   await sleep(300);
