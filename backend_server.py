@@ -48,43 +48,23 @@ def b64_to_bytes(data_url):
         raise ValueError(f"geçersiz base64: {e}")
 
 
-def set_render_mode(inpaint, background):
-    """Orijinal metni silme ve yazı rengi/zemin ayarlarını uygula."""
-    try:
-        with open(BT_CONFIG, "r", encoding="utf-8") as f:
-            cfg = json.load(f)
-        cfg.setdefault("module", {})["enable_inpaint"] = bool(inpaint)
-        fmt = cfg.setdefault("global_fontformat", {})
-        if background == "white":
-            fmt["frgb"] = [0, 0, 0]
-            fmt["srgb"] = [255, 255, 255]
-            fmt["stroke_width"] = 1.5
-        elif background == "black":
-            fmt["frgb"] = [255, 255, 255]
-            fmt["srgb"] = [0, 0, 0]
-            fmt["stroke_width"] = 1.5
-        else:
-            fmt["frgb"] = [255, 255, 255]
-            fmt["srgb"] = [0, 0, 0]
-            fmt["stroke_width"] = 1.5
-        with open(BT_CONFIG, "w", encoding="utf-8") as f:
-            json.dump(cfg, f, ensure_ascii=False, indent=2)
-    except Exception:
-        pass
-
-
-def set_source_language(lang):
-    """BallonsTranslator config'inde kaynak dil'i geçici olarak ayarla."""
-    if not lang or lang not in SOURCE_LANGUAGES:
-        return
-    try:
-        with open(BT_CONFIG, "r", encoding="utf-8") as f:
-            cfg = json.load(f)
-        cfg.setdefault("module", {})["translate_source"] = lang
-        with open(BT_CONFIG, "w", encoding="utf-8") as f:
-            json.dump(cfg, f, ensure_ascii=False, indent=2)
-    except Exception:
-        pass
+def build_job_config(source_lang, inpaint, background):
+    """İstek için özel config üret; genel config dosyasına dokunma."""
+    with open(BT_CONFIG, "r", encoding="utf-8") as f:
+        cfg = json.load(f)
+    module = cfg.setdefault("module", {})
+    if source_lang in SOURCE_LANGUAGES:
+        module["translate_source"] = source_lang
+    module["enable_inpaint"] = bool(inpaint)
+    fmt = cfg.setdefault("global_fontformat", {})
+    if background == "white":
+        fmt["frgb"] = [0, 0, 0]
+        fmt["srgb"] = [255, 255, 255]
+    else:
+        fmt["frgb"] = [255, 255, 255]
+        fmt["srgb"] = [0, 0, 0]
+    fmt["stroke_width"] = 1.5
+    return cfg
 
 
 @app.get("/languages")
@@ -92,8 +72,8 @@ def languages():
     return {"source": SOURCE_LANGUAGES, "target": ["Türk dili"]}
 
 
-def run_ballons(job, env):
-    cmd = [BT_PY, "-m", "ballontranslator", "--headless", "--exec_dirs", job]
+def run_ballons(job, env, config_path):
+    cmd = [BT_PY, "-m", "ballontranslator", "--headless", "--config", config_path, "--exec_dirs", job]
     return subprocess.run(cmd, cwd=BT_ROOT, env=env, input="exit\n",
                           capture_output=True, text=True, timeout=1800)
 
@@ -128,11 +108,12 @@ async def translate(req: Request):
         BT_ROOT, "venv", "Lib", "site-packages", "PyQt6", "Qt6", "plugins"
     )
 
-    # Aynı anda birden fazla istek config dosyasını bozmasın.
-    async with job_lock:
-        set_source_language(body.get("source_lang"))
-        set_render_mode(body.get("inpaint", True), body.get("background", "auto"))
-        proc = await asyncio.to_thread(run_ballons, job, env)
+    # Her istek kendi config dosyasını kullanır; inpainting kapalıysa hiç çalışmaz.
+    cfg = build_job_config(body.get("source_lang"), body.get("inpaint", True), body.get("background", "auto"))
+    config_path = os.path.join(job, "request_config.json")
+    with open(config_path, "w", encoding="utf-8") as f:
+        json.dump(cfg, f, ensure_ascii=False, indent=2)
+    proc = await asyncio.to_thread(run_ballons, job, env, config_path)
 
     result_dir = os.path.join(job, "result")
     try:
