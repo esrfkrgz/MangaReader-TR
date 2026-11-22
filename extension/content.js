@@ -465,8 +465,26 @@ window.addEventListener('popstate', onNavigate);
 // Sayfa ilk açıldığında da hazır çeviri varsa hemen uygula.
 setTimeout(async () => { await applyCachedIfAny(); }, 1800);
 
-const observer = new MutationObserver(() => setTimeout(maybeAuto, 900));
-observer.observe(document.body || document.documentElement, { childList: true, subtree: true });
+const observer = new MutationObserver((mutations) => {
+  if (stopped) return;
+  for (const m of mutations) {
+    if (m.type === 'attributes' && m.target && m.target.tagName === 'IMG' && m.target.dataset.mrTranslated) {
+      const pair = overlayPairs.find(p => p.orig === m.target);
+      if (pair) {
+        pair.overlay.remove();
+        overlayPairs = overlayPairs.filter(p => p !== pair);
+      }
+      delete m.target.dataset.mrTranslated;
+    }
+  }
+  setTimeout(maybeAuto, 900);
+});
+observer.observe(document.body || document.documentElement, {
+  childList: true,
+  subtree: true,
+  attributes: true,
+  attributeFilter: ['src']
+});
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg && msg.action === 'translate') {
