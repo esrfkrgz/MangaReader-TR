@@ -86,8 +86,11 @@ function mangaImagesIn(doc) {
       if (/icon|logo|avatar|spacer|button|emoji|flag/i.test(s)) return false;
       const w = i.naturalWidth || parseInt(i.getAttribute('width'), 10) || 0;
       const h = i.naturalHeight || parseInt(i.getAttribute('height'), 10) || 0;
+      // 1x1 saydam yer tutucuları ve küçük ikonları ele.
+      if (w > 0 && h > 0 && (w < 400 || h < 400)) return false;
       if (w >= 400 && h >= 400) return true;
-      if (/hitomi|\.webp|\.jpg|\.jpeg|\.png/.test(s)) return true;
+      if (s.includes('bg_transparency')) return false;
+      if (/hitomi|webtoon-phinf|\.webp|\.jpg|\.jpeg/.test(s)) return true;
       return false;
     });
   }
@@ -116,6 +119,15 @@ function toDataUrl(blob) {
     const fr = new FileReader();
     fr.onload = () => resolve(fr.result);
     fr.readAsDataURL(blob);
+  });
+}
+
+function fetchImagesViaBackground(urls) {
+  return new Promise((resolve) => {
+    chrome.runtime.sendMessage({ action: 'fetch_images', urls }, (response) => {
+      if (response && response.images) resolve(response.images);
+      else resolve(urls);
+    });
   });
 }
 
@@ -202,20 +214,8 @@ async function translatePage(force = false, silent = false) {
     }
 
     if (!silent) progress('Görseller toplanıyor: ' + imgs.length + ' sayfa...');
-    const sources = [];
-    for (let n = 0; n < imgs.length; n++) {
-      const img = imgs[n];
-      const source = imgSource(img);
-      try {
-        const blob = await (await fetch(source)).blob();
-        sources.push(await toDataUrl(blob));
-      } catch (e) {
-        sources.push(source);
-      }
-      if (!silent && ((n + 1) % 5 === 0 || n === imgs.length - 1)) {
-        progress('Görseller hazırlanıyor: ' + (n + 1) + '/' + imgs.length);
-      }
-    }
+    const urls = imgs.map(img => imgSource(img));
+    const sources = await fetchImagesViaBackground(urls);
 
     if (!silent) progress('Backend’e gönderildi. BallonsTranslator çeviriyor...');
     const res = await fetch(BACKEND + '/translate', {
@@ -262,16 +262,7 @@ async function waitForFrameImages(iframe, timeoutMs = 15000) {
 async function translateUrlsInDoc(doc) {
   const imgs = mangaImagesIn(doc);
   if (!imgs.length) return null;
-  const sources = [];
-  for (const img of imgs) {
-    const source = imgSource(img);
-    try {
-      const blob = await (await fetch(source)).blob();
-      sources.push(await toDataUrl(blob));
-    } catch (e) {
-      sources.push(source);
-    }
-  }
+  const sources = await fetchImagesViaBackground(imgs.map(img => imgSource(img)));
   const res = await fetch(BACKEND + '/translate', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
