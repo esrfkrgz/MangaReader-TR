@@ -328,7 +328,7 @@ async function translatePage(force = false, silent = false) {
     const res = await fetch(BACKEND + '/translate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ images: sources })
+      body: JSON.stringify({ images: sources, source_lang: sourceLang })
     });
     const data = await res.json();
     if (!data.images || data.images.length !== imgs.length) {
@@ -424,8 +424,12 @@ async function prefetchNextPages() {
 }
 
 let autoEnabled = false;
+let sourceLang = 'English';
 console.log('[MangaReaderTR] content script yüklendi:', location.href);
-safeStorageGet(['mr_auto'], (r) => { autoEnabled = !!r.mr_auto; });
+safeStorageGet(['mr_auto', 'mr_source_lang'], (r) => {
+  autoEnabled = !!r.mr_auto;
+  if (r.mr_source_lang) sourceLang = r.mr_source_lang;
+});
 
 function debugInfo() {
   const imgs = mangaImages();
@@ -537,6 +541,16 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
   if (msg && msg.action === 'get_auto') {
     sendResponse({ enabled: autoEnabled });
+    return true;
+  }
+  if (msg && msg.action === 'get_source') {
+    sendResponse({ lang: sourceLang });
+    return true;
+  }
+  if (msg && msg.action === 'set_source') {
+    sourceLang = msg.lang || 'English';
+    safeStorageSet({ mr_source_lang: sourceLang });
+    sendResponse({ lang: sourceLang });
     return true;
   }
   if (msg && msg.action === 'debug') {

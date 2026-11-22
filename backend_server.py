@@ -16,8 +16,12 @@ BT_ROOT = os.environ.get("MANGA_BT_ROOT") or os.path.normpath(
     os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "BallonsTranslator")
 )
 BT_PY = os.path.join(BT_ROOT, "venv", "Scripts", "python.exe")
+BT_CONFIG = os.path.join(BT_ROOT, "config", "config.json")
 WORK = os.path.join(ROOT, "outputs", "backend_jobs")
 os.makedirs(WORK, exist_ok=True)
+
+SOURCE_LANGUAGES = ["English", "日本語", "简体中文", "繁體中文", "한국어"]
+job_lock = asyncio.Lock()
 
 app = FastAPI()
 app.add_middleware(
@@ -39,6 +43,25 @@ def b64_to_bytes(data_url):
         return base64.b64decode(payload, validate=False)
     except Exception as e:
         raise ValueError(f"geçersiz base64: {e}")
+
+
+def set_source_language(lang):
+    """BallonsTranslator config'inde kaynak dil'i geçici olarak ayarla."""
+    if not lang or lang not in SOURCE_LANGUAGES:
+        return
+    try:
+        with open(BT_CONFIG, "r", encoding="utf-8") as f:
+            cfg = json.load(f)
+        cfg.setdefault("module", {})["translate_source"] = lang
+        with open(BT_CONFIG, "w", encoding="utf-8") as f:
+            json.dump(cfg, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+
+@app.get("/languages")
+def languages():
+    return {"source": SOURCE_LANGUAGES, "target": ["Türk dili"]}
 
 
 def run_ballons(job, env):
@@ -77,8 +100,10 @@ async def translate(req: Request):
         BT_ROOT, "venv", "Lib", "site-packages", "PyQt6", "Qt6", "plugins"
     )
 
-    # Blender gibi uzun süren subprocess'ı event loop'u bloklamadan çalıştır.
-    proc = await asyncio.to_thread(run_ballons, job, env)
+    # Aynı anda birden fazla istek config dosyasını bozmasın.
+    async with job_lock:
+        set_source_language(body.get("source_lang"))
+        proc = await asyncio.to_thread(run_ballons, job, env)
 
     result_dir = os.path.join(job, "result")
     try:

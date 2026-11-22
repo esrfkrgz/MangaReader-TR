@@ -93,6 +93,21 @@ document.getElementById('diag').addEventListener('click', async () => {
   console.log('[MangaReaderTR popup debug]', d);
 });
 
+const srcEl = document.getElementById('srclang');
+(async () => {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!await ensureContent(tab)) return;
+  const r = await send(tab, { action: 'get_source' });
+  if (r.response?.lang) srcEl.value = r.response.lang;
+})();
+
+srcEl.addEventListener('change', async () => {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!await ensureContent(tab)) return;
+  const r = await send(tab, { action: 'set_source', lang: srcEl.value });
+  setStatus(r.ok ? ('Kaynak dil: ' + srcEl.value) : ('Hata: ' + r.error));
+});
+
 const autoEl = document.getElementById('auto');
 (async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
