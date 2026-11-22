@@ -214,11 +214,21 @@ async function fetchImagesViaBackground(urls, referer) {
 // --- Overlay katmanı: görselin src'sini değiştirmek yerine üstüne çeviri koyar ---
 const OVERLAY_CLASS = 'mangareader-tr-overlay';
 let overlayPairs = [];
+const originalSrcMap = new WeakMap();
 
 function clearOverlays() {
   document.querySelectorAll('.' + OVERLAY_CLASS).forEach(e => e.remove());
   overlayPairs = [];
   document.querySelectorAll('img[data-mr-translated]').forEach(i => delete i.dataset.mrTranslated);
+}
+
+function clearTranslation() {
+  clearOverlays();
+  originalSrcMap.forEach((src, img) => {
+    try { img.src = src; } catch (e) {}
+  });
+  // WeakMap'ı yeniden oluşturamayız; geri yüklenenler için işaret kaldı.
+  document.querySelectorAll('img[data-mr-original]').forEach(i => delete i.dataset.mrOriginal);
 }
 
 function positionOverlay(pair) {
@@ -235,6 +245,7 @@ function showOverlays(imgs, urls) {
   if (/webtoons\.com/.test(location.host)) {
     imgs.forEach((img, i) => {
       if (!urls[i]) return;
+      if (!originalSrcMap.has(img)) originalSrcMap.set(img, img.src);
       img.src = urls[i];
       img.dataset.mrTranslated = '1';
     });
@@ -501,6 +512,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     translatePage(true)
       .then(sendResponse)
       .catch(e => sendResponse({ status: 'Hata: ' + e.message }));
+    return true;
+  }
+  if (msg && msg.action === 'stop_translation') {
+    autoEnabled = false;
+    safeStorageSet({ mr_auto: false });
+    clearTranslation();
+    badge('');
+    sendResponse({ status: 'Çeviri kapatıldı, orijinal sayfa geri yüklendi.' });
     return true;
   }
   if (msg && msg.action === 'clear_cache') {

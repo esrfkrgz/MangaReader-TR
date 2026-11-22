@@ -57,6 +57,14 @@ document.getElementById('go').addEventListener('click', async () => {
   setStatus(r.ok ? (r.response?.status || 'Bitti.') : ('Hata: ' + r.error));
 });
 
+document.getElementById('stoptr').addEventListener('click', async () => {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!await ensureContent(tab)) return;
+  const r = await send(tab, { action: 'stop_translation' });
+  setStatus(r.ok ? (r.response?.status || 'Kapatıldı.') : ('Hata: ' + r.error));
+  autoEl.checked = false;
+});
+
 document.getElementById('clear').addEventListener('click', async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!await ensureContent(tab)) return;
