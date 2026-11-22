@@ -20,7 +20,10 @@ BT_CONFIG = os.path.join(BT_ROOT, "config", "config.json")
 WORK = os.path.join(ROOT, "outputs", "backend_jobs")
 os.makedirs(WORK, exist_ok=True)
 
-SOURCE_LANGUAGES = ["English", "日本語", "简体中文", "繁體中文", "한국어"]
+SOURCE_LANGUAGES = [
+    "English", "日本語", "简体中文", "繁體中文", "한국어",
+    "Español", "Português", "Français", "Italiano", "Deutsch",
+]
 job_lock = asyncio.Lock()
 
 app = FastAPI()
