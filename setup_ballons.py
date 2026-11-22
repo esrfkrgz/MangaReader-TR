@@ -52,6 +52,10 @@ def main():
         ("downscale_constraint = 0.8", "downscale_constraint = 0.9"),
         ("resize_ratio = min(max(resize_ratio, 0.8), 1)",
          "resize_ratio = min(max(resize_ratio, 0.9), 1)"),
+        ("from ..bubble_layout import fit_text_in_shape",
+         "from ..bubble_layout import fit_text_in_shape\n\nMIN_FONT_PT = 18.0"),
+        ("new_font_size = blk_font.pointSizeF() * resize_ratio",
+         "new_font_size = max(blk_font.pointSizeF() * resize_ratio, MIN_FONT_PT)"),
     ])
 
     # READABILITY_FLOOR_PX sabiti yoksa ekle.
