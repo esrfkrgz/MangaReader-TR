@@ -65,6 +65,7 @@ def extract_blocks(job):
                     box = b.get("xyxy") or [0, 0, 0, 0]
                     blocks.append({
                         "text": str(text).strip(),
+                        "translation": str(b.get("translation") or "").strip(),
                         "box": [float(v) for v in box[:4]],
                     })
             def key(item):
@@ -84,7 +85,7 @@ def build_job_config(source_lang, inpaint, background, ocr_only=False):
     if source_lang in SOURCE_LANGUAGES:
         module["translate_source"] = source_lang
     module["enable_inpaint"] = bool(inpaint) and not ocr_only
-    module["enable_translate"] = not ocr_only
+    module["enable_translate"] = True
     fmt = cfg.setdefault("global_fontformat", {})
     if background == "white":
         fmt["frgb"] = [0, 0, 0]

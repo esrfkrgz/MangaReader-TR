@@ -346,7 +346,7 @@ function showOcrBlocks(img, blocks) {
     const box = b.box || [0, 0, 0, 0];
     const el = document.createElement('div');
     el.className = OCR_CLASS;
-    el.textContent = b.text || '';
+    el.textContent = b.translation || b.text || '';
     el.style.cssText = 'position:fixed;z-index:2147483647;pointer-events:none;display:flex;align-items:center;justify-content:center;' +
       'font:13px sans-serif;font-weight:600;text-align:center;padding:1px;box-sizing:border-box;border-radius:4px;' +
       (whiteBg
