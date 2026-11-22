@@ -6,6 +6,7 @@ import base64
 import shutil
 import subprocess
 import uuid
+import asyncio
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -29,9 +30,21 @@ app.add_middleware(
 
 
 def b64_to_bytes(data_url):
-    if "," in data_url:
-        data_url = data_url.split(",", 1)[1]
-    return base64.b64decode(data_url)
+    if not isinstance(data_url, str) or not data_url.startswith("data:"):
+        raise ValueError("görsel verisi data URL değil")
+    if "," not in data_url:
+        raise ValueError("data URL virgül içermiyor")
+    payload = data_url.split(",", 1)[1]
+    try:
+        return base64.b64decode(payload, validate=False)
+    except Exception as e:
+        raise ValueError(f"geçersiz base64: {e}")
+
+
+def run_ballons(job, env):
+    cmd = [BT_PY, "-m", "ballontranslator", "--headless", "--exec_dirs", job]
+    return subprocess.run(cmd, cwd=BT_ROOT, env=env, input="exit\n",
+                          capture_output=True, text=True, timeout=1800)
 
 
 @app.get("/health")
@@ -50,8 +63,13 @@ async def translate(req: Request):
     os.makedirs(job, exist_ok=True)
 
     for i, data_url in enumerate(images):
+        try:
+            raw = b64_to_bytes(data_url)
+        except ValueError as e:
+            shutil.rmtree(job, ignore_errors=True)
+            return JSONResponse({"error": f"Geçersiz görsel #{i+1}: {e}"}, status_code=400)
         with open(os.path.join(job, f"page_{i+1:03d}.png"), "wb") as f:
-            f.write(b64_to_bytes(data_url))
+            f.write(raw)
 
     env = os.environ.copy()
     env["PYTHONUTF8"] = "1"
@@ -59,11 +77,8 @@ async def translate(req: Request):
         BT_ROOT, "venv", "Lib", "site-packages", "PyQt6", "Qt6", "plugins"
     )
 
-    cmd = [
-        BT_PY, "-m", "ballontranslator", "--headless", "--exec_dirs", job
-    ]
-    proc = subprocess.run(cmd, cwd=BT_ROOT, env=env, input="exit\n",
-                          capture_output=True, text=True, timeout=1800)
+    # Blender gibi uzun süren subprocess'ı event loop'u bloklamadan çalıştır.
+    proc = await asyncio.to_thread(run_ballons, job, env)
 
     result_dir = os.path.join(job, "result")
     try:
